@@ -1,0 +1,31 @@
+VPC_ID=$(aws eks describe-cluster \
+  --name "${CLUSTER_NAME}" \
+  --region "${AWS_REGION}" \
+  --query "cluster.resourcesVpcConfig.vpcId" \
+  --output text)
+
+echo "VPC: $VPC_ID"
+
+# Tag subnets
+for SUBNET_ID in $(aws ec2 describe-subnets \
+  --filters "Name=vpc-id,Values=${VPC_ID}" \
+  --query "Subnets[].SubnetId" \
+  --output text); do
+  echo "Tagging subnet: $SUBNET_ID"
+  aws ec2 create-tags \
+    --resources "${SUBNET_ID}" \
+    --tags "Key=karpenter.sh/discovery,Value=${CLUSTER_NAME}" \
+    --region "${AWS_REGION}"
+done
+
+# Tag security groups
+for SG_ID in $(aws ec2 describe-security-groups \
+  --filters "Name=vpc-id,Values=${VPC_ID}" \
+  --query "SecurityGroups[?GroupName!='default'].GroupId" \
+  --output text); do
+  echo "Tagging SG: $SG_ID"
+  aws ec2 create-tags \
+    --resources "${SG_ID}" \
+    --tags "Key=karpenter.sh/discovery,Value=${CLUSTER_NAME}" \
+    --region "${AWS_REGION}"
+done
